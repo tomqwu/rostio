@@ -60,10 +60,12 @@ jobs:
       - name: Ruff (lint)
         run: poetry run ruff check api tests
 
-      - name: mypy strict (api/utils)
-        # PR 4.7 made api/utils strict. Failures here block merges.
-        # When you add a new file to api/utils it must satisfy strict mypy.
-        run: poetry run mypy api/utils
+      - name: mypy strict (api/utils, api/core, api/schemas)
+        # PR 4.7 made api/utils strict; PR 4.8 added api/core (solver domain)
+        # and api/schemas (Pydantic contract layer). Failures here block
+        # merges. When you add a new file to any of these packages it must
+        # satisfy strict mypy.
+        run: poetry run mypy api/utils api/core api/schemas
 
       - name: mypy (type check, advisory)
         # mypy is advisory for the rest of api/ while we work down the legacy
