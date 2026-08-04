@@ -7,7 +7,13 @@ TEST_SERVER_PORT ?= 8000
 TEST_APP_URL ?= http://localhost:$(TEST_SERVER_PORT)
 TEST_API_BASE ?= $(TEST_APP_URL)/api
 
-TEST_DB_PATH := $(abspath test_roster.db)
+# tests/conftest.py sets TESTING_FORCE_MEMORY=true, which makes
+# api/database.py bind to /tmp/signupflow_test.db no matter what
+# DATABASE_URL says. Point the Makefile at that same file so `rm` and
+# `setup_test_data` actually reset the database the suite reads. Using
+# ./test_roster.db here meant every reset was a no-op and the real DB
+# accumulated rows across runs until fixed-ID tests collided with 409.
+TEST_DB_PATH := /tmp/signupflow_test.db
 TEST_DB_PATH_STRIPPED := $(patsubst /%,%,$(TEST_DB_PATH))
 TEST_DB_URL := sqlite:////$(TEST_DB_PATH_STRIPPED)
 export DATABASE_URL ?= $(TEST_DB_URL)
@@ -186,7 +192,7 @@ test-integration: check-poetry
 
 test-all: ensure-test-env
 	@echo "🚀 Running complete test suite..."
-	@rm -f test_roster.db test_roster.db-shm test_roster.db-wal
+	@rm -f $(TEST_DB_PATH) $(TEST_DB_PATH)-shm $(TEST_DB_PATH)-wal
 	@echo "🔄 Rebuilding fresh SQLite test database..."
 	@poetry run python -m tests.setup_test_data >/dev/null
 	@echo ""
@@ -231,7 +237,7 @@ clean:
 	@rm -rf coverage
 	@rm -rf htmlcov
 	@rm -rf .pytest_cache
-	@rm -rf test_roster.db
+	@rm -f $(TEST_DB_PATH) $(TEST_DB_PATH)-shm $(TEST_DB_PATH)-wal
 	@rm -rf __pycache__
 	@find . -type d -name "__pycache__" ! -path "*/.venv/*" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" ! -path "*/.venv/*" -delete 2>/dev/null || true
