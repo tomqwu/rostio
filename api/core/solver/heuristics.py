@@ -160,7 +160,7 @@ class GreedyHeuristicSolver(SolverAdapter):
             # No specific requirements, assign from team or skip
             if event.team_ids and self.context.teams:
                 team_map = {t.id: t for t in self.context.teams}
-                assignees = []
+                assignees: list[str] = []
                 for team_id in event.team_ids:
                     if team_id in team_map:
                         assignees.extend(team_map[team_id].members[:2])  # Take first 2
@@ -172,8 +172,9 @@ class GreedyHeuristicSolver(SolverAdapter):
                 )
             return Assignment(event_id=event.id, assignees=[], resource_id=event.resource_id)
 
-        # Assign people to roles
-        assignees: list[str] = []
+        # Assign people to roles. Re-binds the name declared above; the
+        # no-required-roles branch always returns before reaching here.
+        assignees = []
         people_map = {p.id: p for p in self.context.people}
 
         for req_role in required_roles:

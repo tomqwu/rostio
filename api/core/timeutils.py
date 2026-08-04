@@ -6,10 +6,15 @@ from datetime import date, datetime, timedelta
 from dateutil import rrule
 
 
-def parse_rrule(rrule_str: str, dtstart: datetime, until: datetime) -> Iterator[datetime]:
-    """Parse RRULE string and generate occurrences."""
+def parse_rrule(rrule_str: str, dtstart: datetime, until: datetime) -> list[datetime]:
+    """Parse RRULE string and return occurrences in [dtstart, until] inclusive.
+
+    `rrule.between()` materialises a list, so callers may safely re-iterate
+    the result.
+    """
     rule = rrule.rrulestr(rrule_str, dtstart=dtstart)
-    return rule.between(dtstart, until, inc=True)
+    occurrences: list[datetime] = list(rule.between(dtstart, until, inc=True))
+    return occurrences
 
 
 def date_range(start: date, end: date) -> Iterator[date]:

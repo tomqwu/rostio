@@ -29,7 +29,8 @@ def load_yaml(path: Path) -> dict[str, Any]:
 def load_json(path: Path) -> dict[str, Any]:
     """Load JSON file to dict."""
     with open(path, encoding="utf-8") as f:
-        return json.load(f)
+        data: dict[str, Any] = json.load(f)
+        return data
 
 
 def save_json(path: Path, data: dict[str, Any]) -> None:
