@@ -404,9 +404,55 @@ def export_solution(
         )
 
     elif export_format.format == "ics":
-        # TODO: ICS export has StringIO bug - needs fixing
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="ICS export not yet implemented"
+        # Build an event-per-VEVENT calendar (mirrors the CSV shape). The
+        # per-person scope filter was already applied above, so ``assignments``
+        # here is already restricted to the requested slice.
+        from api.utils.calendar_utils import generate_ics_from_events
+
+        person_by_id = {p.id: p for p in people}
+        included_event_ids = {a.event_id for a in assignments}
+        event_dicts: list[dict] = []
+        for e in events_db:
+            if e.id not in included_event_ids:
+                continue
+            assignee_ids = event_assignments.get(e.id, [])
+            if export_format.scope.startswith("person:"):
+                assignee_ids = [
+                    pid for pid in assignee_ids if pid == export_format.scope.split(":", 1)[1]
+                ]
+            event_dicts.append(
+                {
+                    "id": e.id,
+                    "type": e.type,
+                    "start_time": e.start_time,
+                    "end_time": e.end_time,
+                    "extra_data": e.extra_data or {},
+                    "assignments": [
+                        {
+                            "person": {
+                                "name": (person_by_id[pid].name if pid in person_by_id else pid)
+                            },
+                            "role": None,
+                        }
+                        for pid in assignee_ids
+                    ],
+                }
+            )
+
+        # Calendar name reflects the org id and (when set) the person scope.
+        calendar_name = f"Solution {solution_id} — {solution.org_id}"
+        if export_format.scope.startswith("person:"):
+            person_id = export_format.scope.split(":", 1)[1]
+            person_name = person_by_id[person_id].name if person_id in person_by_id else person_id
+            calendar_name = f"Solution {solution_id} — {person_name}"
+
+        content = generate_ics_from_events(
+            event_dicts, calendar_name=calendar_name, include_assignments=True
+        )
+        return Response(
+            content=content,
+            media_type="text/calendar; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename=solution_{solution_id}.ics"},
         )
 
     elif export_format.format == "pdf":
