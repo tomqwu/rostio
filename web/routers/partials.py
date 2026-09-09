@@ -615,7 +615,7 @@ def settings_save(
     if not name.strip():
         return _render(error="Organization name is required.")
 
-    current = get_organization(person.org_id, db)
+    current = get_organization(person.org_id, db, current_user=person)
     config = dict(current.config or {})
     tz = timezone.strip()
     if tz:
@@ -632,7 +632,7 @@ def settings_save(
     except ValueError:
         return _render(error="Invalid settings.")
     try:
-        update_organization(person.org_id, payload, db)
+        update_organization(person.org_id, payload, db, current_admin=person)
     except HTTPException as exc:
         return _render(error=str(exc.detail), org=None)
 

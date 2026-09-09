@@ -636,11 +636,11 @@ def admin_onboarding_skip(
     return RedirectResponse(url="/a/dashboard", status_code=303)
 
 
-def _org_settings(db: Session, org_id: str) -> dict:
+def _org_settings(db: Session, person: Person) -> dict:
     """Current org settings for the form (timezone lives in config)."""
     from api.routers.organizations import get_organization
 
-    org = get_organization(org_id, db)
+    org = get_organization(person.org_id, db, current_user=person)
     config = org.config or {}
     return {
         "name": org.name,
@@ -701,7 +701,7 @@ def admin_settings(
         {
             "person": person,
             "active_tab": None,
-            "org": _org_settings(db, person.org_id),
+            "org": _org_settings(db, person),
             "error": None,
             "saved": False,
             "profile": _account_ctx(person),

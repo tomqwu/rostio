@@ -1,12 +1,19 @@
 """Organization router."""
 
 from datetime import timedelta
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from api.database import get_db
-from api.dependencies import get_current_admin_user, verify_org_member
+from api.dependencies import (
+    check_admin_permission,
+    get_current_admin_user,
+    get_current_user,
+    verify_org_member,
+)
 from api.models import AuditAction, Organization, Person
 from api.schemas.common import PaginationParams, get_pagination_params
 from api.schemas.organization import (
@@ -22,6 +29,47 @@ from api.utils.rate_limit_middleware import rate_limit
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
 
+def _get_scoped_organization(
+    org_id: str, db: Session, actor: Person, *, admin: bool = False
+) -> Organization:
+    if admin and not check_admin_permission(actor):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    verify_org_member(actor, org_id)
+    org = db.scalar(select(Organization).where(Organization.id == actor.org_id))
+    if org is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    return org
+
+
+def _commit_organization_change(
+    db: Session,
+    org_id: str,
+    actor: Person,
+    action: str,
+    request: Request | None = None,
+    details: dict[str, Any] | None = None,
+) -> None:
+    """Keep the lifecycle mutation and its audit evidence in one transaction."""
+    try:
+        log_audit_event(
+            db,
+            action=action,
+            user_id=actor.id,
+            user_email=actor.email,
+            organization_id=org_id,
+            resource_type="organization",
+            resource_id=org_id,
+            details=details,
+            ip_address=request.client.host if request and request.client else None,
+            user_agent=request.headers.get("user-agent") if request else None,
+            commit=False,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+
 @router.post(
     "/",
     response_model=OrganizationResponse,
@@ -29,9 +77,10 @@ router = APIRouter(prefix="/organizations", tags=["organizations"])
     dependencies=[Depends(rate_limit("create_org"))],
 )
 def create_organization(org_data: OrganizationCreate, db: Session = Depends(get_db)):
-    """Create a new organization. Rate limited to 2 requests per hour per IP.
+    """Public onboarding exception: create a new, empty organization.
 
-    Automatically creates Free plan subscription with 10 volunteer limit.
+    Rate limited to 2 requests per hour per IP. Reading or changing an
+    existing organization requires authenticated membership.
     """
     # Check if organization already exists
     existing = db.query(Organization).filter(Organization.id == org_data.id).first()
@@ -58,22 +107,29 @@ def create_organization(org_data: OrganizationCreate, db: Session = Depends(get_
 @router.get("/", response_model=OrganizationList)
 def list_organizations(
     include_cancelled: bool = Query(
-        False, description="Include organizations that have been cancelled (admin view)"
+        False, description="Include the caller's organization when cancelled"
     ),
     q: str | None = Query(None, description="Case-insensitive search on organization name"),
     pagination: PaginationParams = Depends(get_pagination_params),
     db: Session = Depends(get_db),
+    current_user: Person = Depends(get_current_user),
 ):
-    """List all organizations. Excludes cancelled by default."""
-    query = db.query(Organization)
+    """List only the caller's organization. Excludes cancelled by default."""
+    filters = [Organization.id == current_user.org_id]
     if not include_cancelled:
-        query = query.filter(Organization.cancelled_at.is_(None))
+        filters.append(Organization.cancelled_at.is_(None))
 
     if q:
-        query = query.filter(Organization.name.ilike(f"%{q}%"))
+        filters.append(Organization.name.ilike(f"%{q}%"))
 
-    orgs = query.offset(pagination.offset).limit(pagination.limit).all()
-    total = query.count()
+    orgs = db.scalars(
+        select(Organization)
+        .where(*filters)
+        .order_by(Organization.id)
+        .offset(pagination.offset)
+        .limit(pagination.limit)
+    ).all()
+    total = db.scalar(select(func.count()).select_from(Organization).where(*filters))
     return {
         "items": orgs,
         "total": total,
@@ -83,26 +139,22 @@ def list_organizations(
 
 
 @router.get("/{org_id}", response_model=OrganizationResponse)
-def get_organization(org_id: str, db: Session = Depends(get_db)):
-    """Get organization by ID."""
-    org = db.query(Organization).filter(Organization.id == org_id).first()
-    if not org:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Organization '{org_id}' not found",
-        )
-    return org
+def get_organization(
+    org_id: str, db: Session = Depends(get_db), current_user: Person = Depends(get_current_user)
+):
+    """Read the authenticated member's organization only."""
+    return _get_scoped_organization(org_id, db, current_user)
 
 
 @router.put("/{org_id}", response_model=OrganizationResponse)
-def update_organization(org_id: str, org_data: OrganizationUpdate, db: Session = Depends(get_db)):
-    """Update organization."""
-    org = db.query(Organization).filter(Organization.id == org_id).first()
-    if not org:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Organization '{org_id}' not found",
-        )
+def update_organization(
+    org_id: str,
+    org_data: OrganizationUpdate,
+    db: Session = Depends(get_db),
+    current_admin: Person = Depends(get_current_admin_user),
+):
+    """Update the authenticated admin's organization and record the actor."""
+    org = _get_scoped_organization(org_id, db, current_admin, admin=True)
 
     # Update fields
     if org_data.name is not None:
@@ -112,23 +164,22 @@ def update_organization(org_id: str, org_data: OrganizationUpdate, db: Session =
     if org_data.config is not None:
         org.config = org_data.config
 
-    db.commit()
+    _commit_organization_change(db, org_id, current_admin, AuditAction.ORG_UPDATED)
     db.refresh(org)
     return org
 
 
 @router.delete("/{org_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_organization(org_id: str, db: Session = Depends(get_db)):
-    """Delete organization and all related data."""
-    org = db.query(Organization).filter(Organization.id == org_id).first()
-    if not org:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Organization '{org_id}' not found",
-        )
+def delete_organization(
+    org_id: str,
+    db: Session = Depends(get_db),
+    current_admin: Person = Depends(get_current_admin_user),
+):
+    """Hard-delete the authenticated admin's organization and related data."""
+    org = _get_scoped_organization(org_id, db, current_admin, admin=True)
 
     db.delete(org)
-    db.commit()
+    _commit_organization_change(db, org_id, current_admin, AuditAction.BULK_DELETE)
     return None
 
 
@@ -145,32 +196,20 @@ def cancel_organization(
     via `data_retention_until`. The org is excluded from the default list
     until restored.
     """
-    verify_org_member(current_admin, org_id)
-    org = db.query(Organization).filter(Organization.id == org_id).first()
-    if not org:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Organization '{org_id}' not found",
-        )
+    org = _get_scoped_organization(org_id, db, current_admin, admin=True)
 
     now = utcnow()
     org.cancelled_at = now
     org.data_retention_until = now + timedelta(days=30)
-    db.commit()
-    db.refresh(org)
-
-    log_audit_event(
+    _commit_organization_change(
         db,
-        action=AuditAction.ORG_CANCELLED,
-        user_id=current_admin.id,
-        user_email=current_admin.email,
-        organization_id=org_id,
-        resource_type="organization",
-        resource_id=org_id,
-        details={"data_retention_until": org.data_retention_until.isoformat()},
-        ip_address=http_request.client.host if http_request.client else None,
-        user_agent=http_request.headers.get("user-agent"),
+        org_id,
+        current_admin,
+        AuditAction.ORG_CANCELLED,
+        http_request,
+        {"data_retention_until": org.data_retention_until.isoformat()},
     )
+    db.refresh(org)
     return org
 
 
@@ -182,29 +221,11 @@ def restore_organization(
     db: Session = Depends(get_db),
 ):
     """Restore a cancelled organization (admin only). Clears cancellation fields."""
-    verify_org_member(current_admin, org_id)
-    org = db.query(Organization).filter(Organization.id == org_id).first()
-    if not org:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Organization '{org_id}' not found",
-        )
+    org = _get_scoped_organization(org_id, db, current_admin, admin=True)
 
     org.cancelled_at = None
     org.data_retention_until = None
     org.deletion_scheduled_at = None
-    db.commit()
+    _commit_organization_change(db, org_id, current_admin, AuditAction.ORG_RESTORED, http_request)
     db.refresh(org)
-
-    log_audit_event(
-        db,
-        action=AuditAction.ORG_RESTORED,
-        user_id=current_admin.id,
-        user_email=current_admin.email,
-        organization_id=org_id,
-        resource_type="organization",
-        resource_id=org_id,
-        ip_address=http_request.client.host if http_request.client else None,
-        user_agent=http_request.headers.get("user-agent"),
-    )
     return org

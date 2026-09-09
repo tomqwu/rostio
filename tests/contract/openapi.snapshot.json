@@ -10049,17 +10049,17 @@
     },
     "/api/v1/organizations/": {
       "get": {
-        "description": "List all organizations. Excludes cancelled by default.",
+        "description": "List only the caller's organization. Excludes cancelled by default.",
         "operationId": "listOrganizations",
         "parameters": [
           {
-            "description": "Include organizations that have been cancelled (admin view)",
+            "description": "Include the caller's organization when cancelled",
             "in": "query",
             "name": "include_cancelled",
             "required": false,
             "schema": {
               "default": false,
-              "description": "Include organizations that have been cancelled (admin view)",
+              "description": "Include the caller's organization when cancelled",
               "title": "Include Cancelled",
               "type": "boolean"
             }
@@ -10132,13 +10132,18 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "List Organizations",
         "tags": [
           "organizations"
         ]
       },
       "post": {
-        "description": "Create a new organization. Rate limited to 2 requests per hour per IP.\n\nAutomatically creates Free plan subscription with 10 volunteer limit.",
+        "description": "Public onboarding exception: create a new, empty organization.\n\nRate limited to 2 requests per hour per IP. Reading or changing an\nexisting organization requires authenticated membership.",
         "operationId": "createOrganization",
         "requestBody": {
           "content": {
@@ -10180,7 +10185,7 @@
     },
     "/api/v1/organizations/{org_id}": {
       "delete": {
-        "description": "Delete organization and all related data.",
+        "description": "Hard-delete the authenticated admin's organization and related data.",
         "operationId": "deleteOrganization",
         "parameters": [
           {
@@ -10208,13 +10213,18 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Delete Organization",
         "tags": [
           "organizations"
         ]
       },
       "get": {
-        "description": "Get organization by ID.",
+        "description": "Read the authenticated member's organization only.",
         "operationId": "getOrganization",
         "parameters": [
           {
@@ -10249,13 +10259,18 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Organization",
         "tags": [
           "organizations"
         ]
       },
       "put": {
-        "description": "Update organization.",
+        "description": "Update the authenticated admin's organization and record the actor.",
         "operationId": "updateOrganization",
         "parameters": [
           {
@@ -10300,6 +10315,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Update Organization",
         "tags": [
           "organizations"
