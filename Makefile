@@ -1,22 +1,21 @@
 .PHONY: run dev stop restart setup install migrate test test-backend test-integration test-all test-coverage test-unit test-unit-fast test-unit-file test-with-timing clean clean-all pre-commit help check-poetry check-python check-deps install-poetry install-deps up down build logs shell db-shell redis-shell test-docker migrate-docker restart-api ps clean-docker check-docker ensure-test-deps prepare-test-data ensure-test-env
 
-export SKIP_TEST_DB_FIXTURES ?= true
+export SKIP_TEST_DB_FIXTURES ?= false
 
 TEST_SERVER_HOST ?= 0.0.0.0
 TEST_SERVER_PORT ?= 8000
 TEST_APP_URL ?= http://localhost:$(TEST_SERVER_PORT)
 TEST_API_BASE ?= $(TEST_APP_URL)/api
 
-# tests/conftest.py sets TESTING_FORCE_MEMORY=true, which makes
-# api/database.py bind to /tmp/signupflow_test.db no matter what
-# DATABASE_URL says. Point the Makefile at that same file so `rm` and
-# `setup_test_data` actually reset the database the suite reads. Using
-# ./test_roster.db here meant every reset was a no-op and the real DB
-# accumulated rows across runs until fixed-ID tests collided with 409.
-TEST_DB_PATH := /tmp/signupflow_test.db
+# Share one disposable database across this invocation's test tiers.
+# Independent make/pytest runs must never reset another checkout's database.
+TEST_DB_PATH := $(shell mktemp -d /tmp/signupflow-tests.XXXXXX)/signupflow_test.db
 TEST_DB_PATH_STRIPPED := $(patsubst /%,%,$(TEST_DB_PATH))
 TEST_DB_URL := sqlite:////$(TEST_DB_PATH_STRIPPED)
-export DATABASE_URL ?= $(TEST_DB_URL)
+ifneq ($(filter test% pre-commit prepare-test-data ensure-test-env,$(MAKECMDGOALS)),)
+export SIGNUPFLOW_TEST_DATABASE_URL := $(TEST_DB_URL)
+export DATABASE_URL := $(TEST_DB_URL)
+endif
 
 # Detect available Docker Compose command (v1 `docker-compose` or v2 `docker compose`)
 DOCKER_COMPOSE := $(shell \

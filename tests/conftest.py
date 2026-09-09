@@ -1,6 +1,7 @@
 """Pytest configuration and fixtures for SignUpFlow tests."""
 
 import os
+import tempfile
 import uuid
 
 from sqlalchemy import create_engine, text
@@ -11,8 +12,10 @@ from sqlalchemy.orm import Session, sessionmaker
 # values when constructed. `TESTING=true` in particular gates email_service
 # off so synchronous BackgroundTasks under FastAPI TestClient don't block
 # on real SMTP retries.
-os.environ.setdefault("DATABASE_URL", "sqlite:////tmp/signupflow_test.db")
-os.environ["TESTING_FORCE_MEMORY"] = "true"
+if "SIGNUPFLOW_TEST_DATABASE_URL" not in os.environ:
+    test_directory = tempfile.mkdtemp(prefix="signupflow-tests-")
+    os.environ["SIGNUPFLOW_TEST_DATABASE_URL"] = f"sqlite:///{test_directory}/signupflow_test.db"
+os.environ["DATABASE_URL"] = os.environ["SIGNUPFLOW_TEST_DATABASE_URL"]
 os.environ["TESTING"] = "true"
 
 import pytest
@@ -118,12 +121,12 @@ def setup_test_database():
 
     connect_args = {"check_same_thread": False}
     engine = create_engine(
-        "sqlite:////tmp/signupflow_test.db",
+        os.environ["SIGNUPFLOW_TEST_DATABASE_URL"],
         connect_args=connect_args,
         echo=False,
     )
 
-    api.database.DATABASE_URL = "sqlite:////tmp/signupflow_test.db"
+    api.database.DATABASE_URL = os.environ["SIGNUPFLOW_TEST_DATABASE_URL"]
     api.database.engine = engine
     api.database.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
