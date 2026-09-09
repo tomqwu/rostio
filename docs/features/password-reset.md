@@ -1,5 +1,24 @@
 # Password Reset Feature - BDD Scenarios
 
+## Current Web Delivery Contract
+
+Run the SignUpFlow web app at `FRONTEND_URL` (or `APP_URL` when unset); use the
+public HTTPS origin in production. `POST /auth/forgot` attaches its email task
+to the HTML response. Reset emails contain `/auth/reset/{token}` browser links
+and retain the `signupflow:///reset-password?token=...` mobile deep link.
+The API endpoints are `POST /api/v1/auth/forgot-password` and
+`POST /api/v1/auth/reset-password`; older scenario endpoint names below are historical.
+
+Keep `DEBUG_RETURN_RESET_TOKEN` off in production. Return the same generic
+message for known and unknown accounts. Log failed sends without including
+email addresses or reset tokens; request a fresh link to retry delivery, which
+invalidates the previous token. Background tasks are best-effort, not a durable
+queue. Track durable delivery and staging-provider verification in #266 and #262.
+
+Run `poetry run pytest tests/web/test_password_reset.py tests/api/test_password_reset_email.py`
+to verify captured email links, one-time use, token rotation, and send failures
+without external email delivery.
+
 ## Feature Overview
 Users can reset their password if they forget it by receiving a secure reset link via email. The reset token expires after 1 hour for security.
 

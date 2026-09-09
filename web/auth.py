@@ -205,6 +205,7 @@ def forgot_form(request: Request):
 @router.post("/auth/forgot")
 def forgot_submit(
     request: Request,
+    background_tasks: BackgroundTasks,
     email: str = Form(...),
     db: Session = Depends(get_db),
 ):
@@ -221,10 +222,13 @@ def forgot_submit(
             {"sent": False, "error": "Enter a valid email address."},
             status_code=400,
         )
-    # Reuse the API handler; a throwaway BackgroundTasks collects the
-    # (best-effort) email send. Generic response regardless of outcome.
-    request_password_reset(req, request, BackgroundTasks(), db)
-    return templates.TemplateResponse(request, "auth/forgot.html", {"sent": True, "error": None})
+    request_password_reset(req, request, background_tasks, db)
+    return templates.TemplateResponse(
+        request,
+        "auth/forgot.html",
+        {"sent": True, "error": None},
+        background=background_tasks,
+    )
 
 
 @router.get("/auth/reset/{token}", response_class=HTMLResponse)

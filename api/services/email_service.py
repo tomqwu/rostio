@@ -1028,8 +1028,8 @@ class EmailService:
             name: Recipient's display name (Person.name)
             reset_token: Reset token from request_password_reset
             app_url: Base **frontend** URL used to build the web fallback
-                link (``{app_url}/reset-password?token=...``). Must point
-                at a host that serves a ``GET /reset-password`` page; in
+                link (``{app_url}/auth/reset/{token}``). Must point
+                at a host that serves the SignUpFlow web app; in
                 this codebase the caller passes ``FRONTEND_URL`` (with
                 ``APP_URL`` as a last-ditch fallback). The mobile deep
                 link uses the hard-coded ``signupflow://`` scheme and is
@@ -1050,7 +1050,7 @@ class EmailService:
         # Custom-scheme deep link → opens the mobile app at /reset-password.
         deep_link = f"signupflow:///reset-password?token={reset_token}"
         # Web fallback for desktop / no-app users.
-        web_url = f"{app_url}/reset-password?token={reset_token}"
+        web_url = f"{app_url.rstrip('/')}/auth/reset/{reset_token}"
 
         # Escape the recipient name before HTML interpolation. Person.name is
         # user-supplied (signup form / admin-created) and not constrained to
