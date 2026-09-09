@@ -1,6 +1,6 @@
 """Shared FastAPI dependencies for authentication and authorization."""
 
-from fastapi import Depends, HTTPException, Query, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -13,18 +13,8 @@ security = HTTPBearer()
 
 
 def check_admin_permission(person: Person) -> bool:
-    """Check if person has admin or super_admin role."""
-    if not person or not person.roles:
-        print(
-            f"DEBUG: check_admin_permission failed. Person: {person}, Roles: {person.roles if person else 'None'}"
-        )
-        return False
-    is_admin = "admin" in person.roles or "super_admin" in person.roles
-    if not is_admin:
-        print(
-            f"DEBUG: check_admin_permission failed. Person: {person.email}, Roles: {person.roles}"
-        )
-    return is_admin
+    """Grant administrative access only for the documented admin role."""
+    return bool(person and person.roles and "admin" in person.roles)
 
 
 def get_person_by_id(
@@ -51,17 +41,6 @@ def get_organization_by_id(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"Organization '{org_id}' not found"
         )
     return org
-
-
-def verify_admin_access(
-    person_id: str = Query(..., description="Person ID"),
-    db: Session = Depends(get_db),
-) -> Person:
-    """Verify person exists and has admin permissions."""
-    person = get_person_by_id(person_id, db)
-    if not check_admin_permission(person):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
-    return person
 
 
 def verify_org_member(
@@ -147,3 +126,10 @@ async def get_current_admin_user(current_user: Person = Depends(get_current_user
     if not check_admin_permission(current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return current_user
+
+
+async def verify_admin_access(
+    current_user: Person = Depends(get_current_user),
+) -> Person:
+    """Authenticate legacy callers with the JWT admin dependency."""
+    return await get_current_admin_user(current_user)

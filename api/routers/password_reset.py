@@ -65,19 +65,20 @@ def _send_reset_email_quiet(to_email: str, name: str, reset_token: str, app_url:
     (see ``EmailService.__init__``), so tests that don't explicitly mock
     the service won't hang on a real SMTP retry loop.
     """
+    import logging
+
+    logger = logging.getLogger("password_reset")
     try:
-        email_service.send_password_reset_email(
+        sent = email_service.send_password_reset_email(
             to_email=to_email,
             name=name,
             reset_token=reset_token,
             app_url=app_url,
         )
+        if not sent:
+            logger.error("Password-reset email delivery failed; a fresh request may be retried")
     except Exception:  # noqa: BLE001 — see docstring; we never want this to bubble
-        import logging
-
-        logging.getLogger("password_reset").exception(
-            "send_password_reset_email failed for %s (token still valid)", to_email
-        )
+        logger.error("Password-reset email delivery failed; a fresh request may be retried")
 
 
 @router.post("/forgot-password", dependencies=[Depends(rate_limit("password_reset"))])
@@ -178,11 +179,8 @@ def request_password_reset(
     # latency (anti-enumeration + anti-DoS).
     #
     # The web fallback link in the email body must point at a host that
-    # actually serves a `GET /reset-password` page — i.e., the frontend,
-    # not the API. ``FRONTEND_URL`` is the dedicated knob (see
-    # ``.env.example`` line 133); we fall back to ``APP_URL`` only as a
-    # last-ditch default so dev deploys without a frontend still produce
-    # a structurally valid email.
+    # serves `GET /auth/reset/{token}` in the SignUpFlow web app.
+    # FRONTEND_URL is the dedicated public origin; APP_URL is the fallback.
     web_app_url = os.getenv("FRONTEND_URL") or os.getenv("APP_URL", "http://localhost:8000")
     background_tasks.add_task(
         _send_reset_email_quiet,

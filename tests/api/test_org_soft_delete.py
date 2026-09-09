@@ -113,4 +113,7 @@ class TestListExcludesCancelled:
 
         resp = client.get("/api/v1/organizations/?include_cancelled=true", headers=active_hdrs)
         ids = [item["id"] for item in resp.json()["items"]]
+        assert "incl-cancelled" not in ids
+        resp = client.get("/api/v1/organizations/?include_cancelled=true", headers=cancelled_hdrs)
+        ids = [item["id"] for item in resp.json()["items"]]
         assert "incl-cancelled" in ids

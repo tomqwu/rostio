@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
 from api.database import get_db
-from api.dependencies import get_current_user, verify_admin_access, verify_org_member
+from api.dependencies import get_current_admin_user, verify_org_member
 from api.models import Person
 from api.schemas.billing import (
     CancelRequest,
@@ -25,7 +25,7 @@ router = APIRouter(tags=["billing"])
 @router.get("/billing/subscription")
 def get_subscription(
     org_id: str = Query(..., description="Organization ID"),
-    current_user: Person = Depends(get_current_user),
+    current_user: Person = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -34,7 +34,7 @@ def get_subscription(
     Returns subscription tier, usage metrics, and billing information.
 
     Requires:
-        - User must be member of the organization
+        - User must be an authenticated admin of the organization
 
     Returns:
         dict: Subscription details with usage metrics
@@ -77,7 +77,7 @@ def get_subscription(
 @router.post("/billing/subscription/upgrade")
 def upgrade_subscription(
     request: UpgradeRequest,
-    admin: Person = Depends(verify_admin_access),
+    admin: Person = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -152,7 +152,7 @@ def upgrade_subscription(
 @router.post("/billing/subscription/checkout-success")
 def handle_checkout_success(
     session_id: str = Query(..., description="Stripe checkout session ID"),
-    admin: Person = Depends(verify_admin_access),
+    admin: Person = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -197,7 +197,7 @@ def handle_checkout_success(
 @router.post("/billing/subscription/trial")
 def start_trial(
     request: TrialRequest,
-    admin: Person = Depends(verify_admin_access),
+    admin: Person = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -263,7 +263,7 @@ def start_trial(
 @router.post("/billing/subscription/downgrade")
 def downgrade_subscription(
     request: DowngradeRequest,
-    admin: Person = Depends(verify_admin_access),
+    admin: Person = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -335,7 +335,7 @@ def downgrade_subscription(
 @router.post("/billing/subscription/cancel-downgrade")
 def cancel_downgrade(
     org_id: str = Query(..., description="Organization ID"),
-    admin: Person = Depends(verify_admin_access),
+    admin: Person = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -412,7 +412,7 @@ def cancel_downgrade(
 @router.post("/billing/subscription/cancel")
 def cancel_subscription(
     request: CancelRequest,
-    admin: Person = Depends(verify_admin_access),
+    admin: Person = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -484,7 +484,7 @@ def cancel_subscription(
 @router.post("/billing/subscription/reactivate")
 def reactivate_subscription(
     org_id: str = Query(..., description="Organization ID"),
-    admin: Person = Depends(verify_admin_access),
+    admin: Person = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -545,7 +545,7 @@ def reactivate_subscription(
 @router.get("/billing/payment-methods")
 def get_payment_methods(
     org_id: str = Query(..., description="Organization ID"),
-    current_user: Person = Depends(get_current_user),
+    current_user: Person = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -554,7 +554,7 @@ def get_payment_methods(
     Returns list of payment methods with card details, expiration, and primary status.
 
     Requires:
-        - User must be member of the organization
+        - User must be an authenticated admin of the organization
 
     Query Parameters:
         org_id: Organization ID
@@ -594,7 +594,7 @@ def get_payment_methods(
 def add_payment_method(
     payment_method_id: str = Query(..., description="Stripe payment method ID"),
     org_id: str = Query(..., description="Organization ID"),
-    admin: Person = Depends(verify_admin_access),
+    admin: Person = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -633,7 +633,7 @@ def add_payment_method(
 def remove_payment_method(
     payment_method_id: str,
     org_id: str = Query(..., description="Organization ID"),
-    admin: Person = Depends(verify_admin_access),
+    admin: Person = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -661,7 +661,7 @@ def remove_payment_method(
     from api.services.stripe_service import StripeService
 
     stripe_service = StripeService(db)
-    result = stripe_service.detach_payment_method(payment_method_id)
+    result = stripe_service.detach_payment_method(org_id, payment_method_id)
 
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result["message"])
@@ -673,7 +673,7 @@ def remove_payment_method(
 def set_primary_payment_method(
     payment_method_id: str,
     org_id: str = Query(..., description="Organization ID"),
-    admin: Person = Depends(verify_admin_access),
+    admin: Person = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -713,7 +713,7 @@ def get_billing_history(
     org_id: str = Query(..., description="Organization ID"),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     limit: int = Query(50, ge=1, le=100, description="Records per page (default: 50)"),
-    current_user: Person = Depends(get_current_user),
+    current_user: Person = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -722,7 +722,7 @@ def get_billing_history(
     Returns list of billing events (charges, refunds, subscription changes).
 
     Requires:
-        - User must be member of the organization
+        - User must be an authenticated admin of the organization
 
     Query Parameters:
         org_id: Organization ID
@@ -803,7 +803,7 @@ def get_billing_history(
 def download_invoice_pdf(
     billing_history_id: str,
     format: str = Query("html", pattern="^(pdf|html)$", description="Output format (pdf or html)"),
-    current_user: Person = Depends(get_current_user),
+    current_user: Person = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -812,7 +812,7 @@ def download_invoice_pdf(
     Returns PDF file for download or HTML preview.
 
     Requires:
-        - User must be member of the organization
+        - User must be an authenticated admin of the organization
 
     Path Parameters:
         billing_history_id: Billing history record ID
@@ -830,7 +830,12 @@ def download_invoice_pdf(
 
     # Get billing history record
     billing_record = (
-        db.query(BillingHistory).filter(BillingHistory.id == billing_history_id).first()
+        db.query(BillingHistory)
+        .filter(
+            BillingHistory.id == billing_history_id,
+            BillingHistory.org_id == current_user.org_id,
+        )
+        .first()
     )
 
     if not billing_record:
@@ -890,7 +895,7 @@ def download_invoice_pdf(
 @router.post("/billing/portal")
 def create_billing_portal_session(
     org_id: str = Query(..., description="Organization ID"),
-    admin: Person = Depends(verify_admin_access),
+    admin: Person = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """

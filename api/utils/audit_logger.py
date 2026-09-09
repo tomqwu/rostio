@@ -26,6 +26,7 @@ def log_audit_event(
     user_agent: str | None = None,
     status: str = "success",
     error_message: str | None = None,
+    commit: bool = True,
 ) -> AuditLog:
     """
     Log an audit event to the database.
@@ -43,6 +44,7 @@ def log_audit_event(
         user_agent: Browser/client user agent string
         status: "success", "failure", or "denied"
         error_message: Error message if status = "failure"
+        commit: Commit immediately; set False to join the caller's transaction.
 
     Returns:
         Created AuditLog instance
@@ -63,8 +65,9 @@ def log_audit_event(
     )
 
     db.add(audit_log)
-    db.commit()
-    db.refresh(audit_log)
+    if commit:
+        db.commit()
+        db.refresh(audit_log)
 
     return audit_log
 

@@ -265,7 +265,10 @@ class TestOrganizationsSearch:
     def test_q_matches_name(self, client, db):
         seed_org(client, "lf-orgs-alpha", name="Alpha Church")
         seed_org(client, "lf-orgs-beta", name="Beta League")
-        resp = client.get("/api/v1/organizations/?q=alpha")
+        owner = seed_user(client, "lf-orgs-alpha", "alpha@example.com", "Owner")
+        resp = client.get(
+            "/api/v1/organizations/?q=alpha", headers={"Authorization": f"Bearer {owner['token']}"}
+        )
         assert resp.status_code == 200
         names = [o["name"] for o in resp.json()["items"]]
         assert "Alpha Church" in names
@@ -273,7 +276,11 @@ class TestOrganizationsSearch:
 
     def test_q_no_match_returns_empty(self, client, db):
         seed_org(client, "lf-orgs-zzz", name="Zeta Org")
-        resp = client.get("/api/v1/organizations/?q=nomatchhere")
+        owner = seed_user(client, "lf-orgs-zzz", "zeta@example.com", "Owner")
+        resp = client.get(
+            "/api/v1/organizations/?q=nomatchhere",
+            headers={"Authorization": f"Bearer {owner['token']}"},
+        )
         assert resp.status_code == 200
         assert resp.json()["items"] == []
         assert resp.json()["total"] == 0

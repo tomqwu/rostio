@@ -97,133 +97,87 @@ class TestCreateOrganization:
 
 
 class TestGetOrganization:
-    """GET /organizations/{org_id}."""
+    """Authenticated organization reads."""
 
-    def test_get_existing(self, api_server, api_base):
-        client = httpx.Client()
-        org_id = _unique("get_org")
-        client.post(
-            f"{api_base}/organizations/",
-            json={"id": org_id, "name": "Get Me", "region": "CA", "config": {}},
-        )
-
-        response = client.get(f"{api_base}/organizations/{org_id}")
-
+    def test_get_existing(self, setup_admin):
+        data = setup_admin
+        response = data["client"].get(f"{data['api_base']}/organizations/{data['org_id']}")
         assert response.status_code == 200
-        body = response.json()
-        assert body["id"] == org_id
-        assert body["name"] == "Get Me"
-        assert body["region"] == "CA"
+        assert response.json()["id"] == data["org_id"]
 
-    def test_get_missing_returns_404(self, api_server, api_base):
-        client = httpx.Client()
+    def test_anonymous_read_denied(self, api_server, api_base):
+        with httpx.Client() as client:
+            response = client.get(f"{api_base}/organizations/unknown")
+        assert response.status_code == 403
 
-        response = client.get(f"{api_base}/organizations/does_not_exist_{int(time.time())}")
-
-        assert response.status_code == 404
+    def test_unknown_tenant_does_not_reveal_existence(self, setup_admin):
+        data = setup_admin
+        response = data["client"].get(f"{data['api_base']}/organizations/unknown")
+        assert response.status_code == 403
 
 
 class TestListOrganizations:
-    """GET /organizations/ with pagination + search + include_cancelled."""
+    """List/search only the caller's tenant, including cancellation filters."""
 
-    def test_list_returns_envelope(self, api_server, api_base):
-        client = httpx.Client()
-        org_id = _unique("list_env_org")
-        client.post(
-            f"{api_base}/organizations/",
-            json={"id": org_id, "name": "List Envelope", "region": "US", "config": {}},
-        )
-
-        response = client.get(f"{api_base}/organizations/")
-
+    def test_list_returns_envelope(self, setup_admin):
+        data = setup_admin
+        response = data["client"].get(f"{data['api_base']}/organizations/")
         assert response.status_code == 200
         body = response.json()
-        assert set(body.keys()) >= {"items", "total", "limit", "offset"}
-        assert isinstance(body["items"], list)
-        assert isinstance(body["total"], int)
+        assert set(body) >= {"items", "total", "limit", "offset"}
+        assert body["total"] == 1
+        assert [org["id"] for org in body["items"]] == [data["org_id"]]
 
-    def test_list_search_q_filters_by_name(self, api_server, api_base):
-        client = httpx.Client()
-        marker = _unique("QMARK")
-        org_id_a = f"listq_a_{marker}"
-        org_id_b = f"listq_b_{marker}"
-        client.post(
-            f"{api_base}/organizations/",
-            json={"id": org_id_a, "name": f"Alpha {marker}", "region": "US", "config": {}},
+    def test_list_search_q_filters_by_name_and_membership(self, setup_admin):
+        data = setup_admin
+        client, api_base = data["client"], data["api_base"]
+        other = _unique("foreign")
+        created = client.post(
+            f"{api_base}/organizations/", json={"id": other, "name": data["org_id"]}
         )
-        client.post(
-            f"{api_base}/organizations/",
-            json={"id": org_id_b, "name": "Beta Ignored", "region": "US", "config": {}},
-        )
-
-        response = client.get(f"{api_base}/organizations/", params={"q": marker})
-
+        assert created.status_code == 201
+        response = client.get(f"{api_base}/organizations/", params={"q": data["org_id"]})
         assert response.status_code == 200
-        items = response.json()["items"]
-        returned_ids = {o["id"] for o in items}
-        assert org_id_a in returned_ids
-        assert org_id_b not in returned_ids
+        assert [row["id"] for row in response.json()["items"]] == [data["org_id"]]
+        response = client.get(f"{api_base}/organizations/", params={"q": "not-a-matching-name"})
+        assert response.json()["total"] == 0
 
     def test_list_excludes_cancelled_by_default(self, setup_admin):
         data = setup_admin
-        client = data["client"]
-        api_base = data["api_base"]
-
-        # Cancel the setup admin's org (the admin belongs to it, satisfying verify_org_member)
-        cancel = client.post(f"{api_base}/organizations/{data['org_id']}/cancel")
-        assert cancel.status_code == 200, cancel.text
-
-        # Scope the listing with q= so the assertion isn't sensitive to
-        # unrelated orgs created by concurrent tests spilling past page 1.
-        response = client.get(f"{api_base}/organizations/", params={"q": data["org_id"]})
+        client, api_base = data["client"], data["api_base"]
+        response = client.post(f"{api_base}/organizations/{data['org_id']}/cancel")
         assert response.status_code == 200
-        assert data["org_id"] not in {o["id"] for o in response.json()["items"]}
+        response = client.get(f"{api_base}/organizations/")
+        assert response.status_code == 200
+        assert response.json()["total"] == 0
 
-    def test_list_include_cancelled_true_returns_them(self, setup_admin):
+    def test_list_include_cancelled_true_returns_own_tenant(self, setup_admin):
         data = setup_admin
-        client = data["client"]
-        api_base = data["api_base"]
-
-        client.post(f"{api_base}/organizations/{data['org_id']}/cancel")
-
-        response = client.get(
-            f"{api_base}/organizations/",
-            params={"include_cancelled": True, "q": data["org_id"]},
-        )
+        client, api_base = data["client"], data["api_base"]
+        assert client.post(f"{api_base}/organizations/{data['org_id']}/cancel").status_code == 200
+        response = client.get(f"{api_base}/organizations/", params={"include_cancelled": True})
         assert response.status_code == 200
-        assert data["org_id"] in {o["id"] for o in response.json()["items"]}
+        assert [row["id"] for row in response.json()["items"]] == [data["org_id"]]
 
 
 class TestUpdateOrganization:
-    """PUT /organizations/{org_id}."""
+    """Only the owning authenticated admin may update settings."""
 
-    def test_update_partial(self, api_server, api_base):
-        client = httpx.Client()
-        org_id = _unique("upd_org")
-        client.post(
-            f"{api_base}/organizations/",
-            json={"id": org_id, "name": "Before", "region": "US", "config": {}},
+    def test_update_partial(self, setup_admin):
+        data = setup_admin
+        response = data["client"].put(
+            f"{data['api_base']}/organizations/{data['org_id']}", json={"name": "After"}
         )
-
-        response = client.put(
-            f"{api_base}/organizations/{org_id}",
-            json={"name": "After"},
-        )
-
         assert response.status_code == 200
         assert response.json()["name"] == "After"
-        # Region left untouched
         assert response.json()["region"] == "US"
 
-    def test_update_missing_returns_404(self, api_server, api_base):
-        client = httpx.Client()
-
-        response = client.put(
-            f"{api_base}/organizations/nope_{int(time.time())}",
-            json={"name": "wont matter"},
+    def test_update_other_tenant_denied(self, setup_admin):
+        data = setup_admin
+        response = data["client"].put(
+            f"{data['api_base']}/organizations/unknown", json={"name": "Denied"}
         )
-
-        assert response.status_code == 404
+        assert response.status_code == 403
 
 
 class TestCancelRestoreOrganization:
@@ -272,29 +226,19 @@ class TestCancelRestoreOrganization:
 
 
 class TestDeleteOrganization:
-    """DELETE /organizations/{org_id}."""
+    """Hard deletion removes membership and invalidates subsequent requests."""
 
-    def test_delete_removes_org(self, api_server, api_base):
-        client = httpx.Client()
-        org_id = _unique("del_org")
-        client.post(
-            f"{api_base}/organizations/",
-            json={"id": org_id, "name": "Delete Me", "region": "US", "config": {}},
-        )
-
+    def test_delete_removes_org_and_owner(self, setup_admin):
+        data = setup_admin
+        client, api_base, org_id = data["client"], data["api_base"], data["org_id"]
         response = client.delete(f"{api_base}/organizations/{org_id}")
-
         assert response.status_code == 204
-        # And subsequent GET is 404
-        follow = client.get(f"{api_base}/organizations/{org_id}")
-        assert follow.status_code == 404
+        assert client.get(f"{api_base}/organizations/{org_id}").status_code == 401
 
-    def test_delete_missing_returns_404(self, api_server, api_base):
-        client = httpx.Client()
-
-        response = client.delete(f"{api_base}/organizations/nope_{int(time.time())}")
-
-        assert response.status_code == 404
+    def test_delete_other_tenant_denied(self, setup_admin):
+        data = setup_admin
+        response = data["client"].delete(f"{data['api_base']}/organizations/unknown")
+        assert response.status_code == 403
 
 
 if __name__ == "__main__":
