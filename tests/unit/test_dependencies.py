@@ -22,10 +22,10 @@ class TestCheckAdminPermission:
         person = Person(id="p1", name="Admin", roles=["admin"])
         assert check_admin_permission(person) is True
 
-    def test_super_admin_role_returns_true(self):
-        """Test that super_admin role returns True."""
+    def test_super_admin_role_does_not_grant_privileges(self):
+        """Only the documented admin role grants administrative access."""
         person = Person(id="p1", name="Super Admin", roles=["super_admin"])
-        assert check_admin_permission(person) is True
+        assert check_admin_permission(person) is False
 
     def test_multiple_roles_with_admin_returns_true(self):
         """Test that having admin among other roles returns True."""
@@ -140,7 +140,8 @@ class TestVerifyOrgMember:
 class TestVerifyAdminAccess:
     """Test verify_admin_access dependency function."""
 
-    def test_admin_user_returns_person(self, db_session: Session, test_org: Organization):
+    @pytest.mark.asyncio
+    async def test_admin_user_returns_person(self, db_session: Session, test_org: Organization):
         """Test that admin user is returned."""
         import time
 
@@ -158,12 +159,13 @@ class TestVerifyAdminAccess:
         db_session.commit()
 
         # Verify admin access
-        result = verify_admin_access(person_id, db_session)
+        result = await verify_admin_access(person)
         assert result is not None
         assert result.id == person_id
         assert "admin" in result.roles
 
-    def test_non_admin_raises_403(self, db_session: Session, test_org: Organization):
+    @pytest.mark.asyncio
+    async def test_non_admin_raises_403(self, db_session: Session, test_org: Organization):
         """Test that non-admin user raises HTTPException with 403."""
         import time
 
@@ -182,17 +184,20 @@ class TestVerifyAdminAccess:
 
         # Verify admin access should fail
         with pytest.raises(HTTPException) as exc_info:
-            verify_admin_access(person_id, db_session)
+            await verify_admin_access(person)
 
         assert exc_info.value.status_code == 403
         assert "admin" in exc_info.value.detail.lower()
 
-    def test_nonexistent_user_raises_404(self, db_session: Session):
-        """Test that nonexistent user raises HTTPException with 404."""
-        with pytest.raises(HTTPException) as exc_info:
-            verify_admin_access("nonexistent", db_session)
+    def test_legacy_dependency_requires_authenticated_identity(self):
+        """The compatibility dependency must not accept a caller-supplied ID."""
+        from inspect import signature
 
-        assert exc_info.value.status_code == 404
+        from api.dependencies import get_current_user
+
+        parameters = signature(verify_admin_access).parameters
+        assert list(parameters) == ["current_user"]
+        assert parameters["current_user"].default.dependency is get_current_user
 
 
 # Fixtures

@@ -679,9 +679,9 @@ class StripeService:
             logger.error(f"Error attaching payment method for org {org_id}: {e}")
             return {"success": False, "message": f"Failed to add payment method: {str(e)}"}
 
-    def detach_payment_method(self, payment_method_id: str) -> dict[str, Any]:
+    def detach_payment_method(self, org_id: str, payment_method_id: str) -> dict[str, Any]:
         """
-        Detach payment method from customer.
+        Detach a payment method only from this organization's customer.
 
         Args:
             payment_method_id: Stripe payment method ID to detach
@@ -695,8 +695,16 @@ class StripeService:
         """
         try:
             import stripe
+            from sqlalchemy import select
 
-            # Detach payment method
+            subscription = self.db.scalar(select(Subscription).where(Subscription.org_id == org_id))
+            if not subscription or not subscription.stripe_customer_id:
+                return {"success": False, "message": "No Stripe customer found for organization"}
+            payment_method = stripe.PaymentMethod.retrieve(payment_method_id)
+            if payment_method.get("customer") != subscription.stripe_customer_id:
+                return {"success": False, "message": "Payment method not found for organization"}
+
+            # Verify ownership before the provider mutation.
             stripe.PaymentMethod.detach(payment_method_id)
 
             logger.info(f"Detached payment method {payment_method_id}")
@@ -732,6 +740,10 @@ class StripeService:
 
             if not subscription or not subscription.stripe_customer_id:
                 return {"success": False, "message": "No Stripe customer found for organization"}
+
+            payment_method = stripe.PaymentMethod.retrieve(payment_method_id)
+            if payment_method.get("customer") != subscription.stripe_customer_id:
+                return {"success": False, "message": "Payment method not found for organization"}
 
             # Set default payment method
             stripe.Customer.modify(

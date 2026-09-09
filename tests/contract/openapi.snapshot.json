@@ -6881,7 +6881,7 @@
     },
     "/api/v1/billing/history": {
       "get": {
-        "description": "Get organization's billing history with pagination.\n\nReturns list of billing events (charges, refunds, subscription changes).\n\nRequires:\n    - User must be member of the organization\n\nQuery Parameters:\n    org_id: Organization ID\n    page: Page number (default: 1)\n    limit: Records per page (default: 50, max: 100)\n\nReturns:\n    {\n        \"success\": true,\n        \"history\": [\n            {\n                \"id\": 123,\n                \"event_type\": \"charge\",\n                \"amount_cents\": 2900,\n                \"currency\": \"usd\",\n                \"payment_status\": \"succeeded\",\n                \"event_timestamp\": \"2025-10-23T10:00:00Z\",\n                \"description\": \"Payment for starter plan\",\n                \"stripe_invoice_id\": \"in_xxx\"\n            }\n        ],\n        \"pagination\": {\n            \"page\": 1,\n            \"limit\": 50,\n            \"total\": 45,\n            \"pages\": 1\n        }\n    }",
+        "description": "Get organization's billing history with pagination.\n\nReturns list of billing events (charges, refunds, subscription changes).\n\nRequires:\n    - User must be an authenticated admin of the organization\n\nQuery Parameters:\n    org_id: Organization ID\n    page: Page number (default: 1)\n    limit: Records per page (default: 50, max: 100)\n\nReturns:\n    {\n        \"success\": true,\n        \"history\": [\n            {\n                \"id\": 123,\n                \"event_type\": \"charge\",\n                \"amount_cents\": 2900,\n                \"currency\": \"usd\",\n                \"payment_status\": \"succeeded\",\n                \"event_timestamp\": \"2025-10-23T10:00:00Z\",\n                \"description\": \"Payment for starter plan\",\n                \"stripe_invoice_id\": \"in_xxx\"\n            }\n        ],\n        \"pagination\": {\n            \"page\": 1,\n            \"limit\": 50,\n            \"total\": 45,\n            \"pages\": 1\n        }\n    }",
         "operationId": "getBillingHistory",
         "parameters": [
           {
@@ -6960,7 +6960,7 @@
     },
     "/api/v1/billing/invoices/{billing_history_id}/pdf": {
       "get": {
-        "description": "Generate and download invoice PDF for billing history record.\n\nReturns PDF file for download or HTML preview.\n\nRequires:\n    - User must be member of the organization\n\nPath Parameters:\n    billing_history_id: Billing history record ID\n\nQuery Parameters:\n    format: Output format - \"pdf\" (text-based) or \"html\" (styled template)\n\nReturns:\n    PDF file download or HTML response",
+        "description": "Generate and download invoice PDF for billing history record.\n\nReturns PDF file for download or HTML preview.\n\nRequires:\n    - User must be an authenticated admin of the organization\n\nPath Parameters:\n    billing_history_id: Billing history record ID\n\nQuery Parameters:\n    format: Output format - \"pdf\" (text-based) or \"html\" (styled template)\n\nReturns:\n    PDF file download or HTML response",
         "operationId": "downloadInvoicePdf",
         "parameters": [
           {
@@ -7019,7 +7019,7 @@
     },
     "/api/v1/billing/payment-methods": {
       "get": {
-        "description": "Get organization's payment methods from Stripe.\n\nReturns list of payment methods with card details, expiration, and primary status.\n\nRequires:\n    - User must be member of the organization\n\nQuery Parameters:\n    org_id: Organization ID\n\nReturns:\n    {\n        \"success\": true,\n        \"payment_methods\": [\n            {\n                \"id\": \"pm_xxx\",\n                \"type\": \"card\",\n                \"card\": {\n                    \"brand\": \"visa\",\n                    \"last4\": \"4242\",\n                    \"exp_month\": 12,\n                    \"exp_year\": 2025\n                },\n                \"is_default\": true\n            }\n        ]\n    }",
+        "description": "Get organization's payment methods from Stripe.\n\nReturns list of payment methods with card details, expiration, and primary status.\n\nRequires:\n    - User must be an authenticated admin of the organization\n\nQuery Parameters:\n    org_id: Organization ID\n\nReturns:\n    {\n        \"success\": true,\n        \"payment_methods\": [\n            {\n                \"id\": \"pm_xxx\",\n                \"type\": \"card\",\n                \"card\": {\n                    \"brand\": \"visa\",\n                    \"last4\": \"4242\",\n                    \"exp_month\": 12,\n                    \"exp_year\": 2025\n                },\n                \"is_default\": true\n            }\n        ]\n    }",
         "operationId": "getPaymentMethods",
         "parameters": [
           {
@@ -7093,17 +7093,6 @@
               "title": "Org Id",
               "type": "string"
             }
-          },
-          {
-            "description": "Person ID",
-            "in": "query",
-            "name": "person_id",
-            "required": true,
-            "schema": {
-              "description": "Person ID",
-              "title": "Person Id",
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -7130,6 +7119,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Add Payment Method",
         "tags": [
           "billing"
@@ -7160,17 +7154,6 @@
               "title": "Org Id",
               "type": "string"
             }
-          },
-          {
-            "description": "Person ID",
-            "in": "query",
-            "name": "person_id",
-            "required": true,
-            "schema": {
-              "description": "Person ID",
-              "title": "Person Id",
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -7197,6 +7180,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Remove Payment Method",
         "tags": [
           "billing"
@@ -7227,17 +7215,6 @@
               "title": "Org Id",
               "type": "string"
             }
-          },
-          {
-            "description": "Person ID",
-            "in": "query",
-            "name": "person_id",
-            "required": true,
-            "schema": {
-              "description": "Person ID",
-              "title": "Person Id",
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -7264,6 +7241,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Set Primary Payment Method",
         "tags": [
           "billing"
@@ -7283,17 +7265,6 @@
             "schema": {
               "description": "Organization ID",
               "title": "Org Id",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Person ID",
-            "in": "query",
-            "name": "person_id",
-            "required": true,
-            "schema": {
-              "description": "Person ID",
-              "title": "Person Id",
               "type": "string"
             }
           }
@@ -7322,6 +7293,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Create Billing Portal Session",
         "tags": [
           "billing"
@@ -7330,7 +7306,7 @@
     },
     "/api/v1/billing/subscription": {
       "get": {
-        "description": "Get current subscription details for organization.\n\nReturns subscription tier, usage metrics, and billing information.\n\nRequires:\n    - User must be member of the organization\n\nReturns:\n    dict: Subscription details with usage metrics\n    {\n        \"subscription\": SubscriptionResponse,\n        \"usage\": UsageSummaryResponse,\n        \"next_invoice\": Optional[dict]\n    }",
+        "description": "Get current subscription details for organization.\n\nReturns subscription tier, usage metrics, and billing information.\n\nRequires:\n    - User must be an authenticated admin of the organization\n\nReturns:\n    dict: Subscription details with usage metrics\n    {\n        \"subscription\": SubscriptionResponse,\n        \"usage\": UsageSummaryResponse,\n        \"next_invoice\": Optional[dict]\n    }",
         "operationId": "getSubscription",
         "parameters": [
           {
@@ -7384,19 +7360,6 @@
       "post": {
         "description": "Cancel subscription with service continuing until period end.\n\nThis endpoint:\n1. Cancels subscription in Stripe (at period end by default)\n2. Service continues until current period ends\n3. Organization downgraded to Free plan at period end\n4. Data retained for 30 days after cancellation\n5. Records cancellation event for audit trail\n6. Sends cancellation confirmation email (future)\n\nRequires:\n    - User must be admin\n    - User must belong to the organization\n    - Organization must have active paid subscription\n\nRequest Body:\n    {\n        \"org_id\": \"org_123\",\n        \"immediately\": false,\n        \"reason\": \"Cost reduction\",\n        \"feedback\": \"Great service, just downsizing\"\n    }\n\nReturns:\n    dict: Cancellation details\n    {\n        \"success\": true,\n        \"subscription\": SubscriptionResponse,\n        \"period_end\": \"2025-11-23T...\",\n        \"data_retention_until\": \"2025-12-23T...\",\n        \"message\": \"Subscription will cancel at period end\"\n    }",
         "operationId": "cancelSubscription",
-        "parameters": [
-          {
-            "description": "Person ID",
-            "in": "query",
-            "name": "person_id",
-            "required": true,
-            "schema": {
-              "description": "Person ID",
-              "title": "Person Id",
-              "type": "string"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -7431,6 +7394,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Cancel Subscription",
         "tags": [
           "billing"
@@ -7450,17 +7418,6 @@
             "schema": {
               "description": "Organization ID",
               "title": "Org Id",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Person ID",
-            "in": "query",
-            "name": "person_id",
-            "required": true,
-            "schema": {
-              "description": "Person ID",
-              "title": "Person Id",
               "type": "string"
             }
           }
@@ -7489,6 +7446,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Cancel Downgrade",
         "tags": [
           "billing"
@@ -7508,17 +7470,6 @@
             "schema": {
               "description": "Stripe checkout session ID",
               "title": "Session Id",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Person ID",
-            "in": "query",
-            "name": "person_id",
-            "required": true,
-            "schema": {
-              "description": "Person ID",
-              "title": "Person Id",
               "type": "string"
             }
           }
@@ -7547,6 +7498,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Handle Checkout Success",
         "tags": [
           "billing"
@@ -7557,19 +7513,6 @@
       "post": {
         "description": "Schedule subscription downgrade to execute at period end.\n\nThis endpoint:\n1. Validates downgrade is to lower tier\n2. Schedules downgrade for current period end\n3. Calculates credit for unused time\n4. Stores pending downgrade in subscription.pending_downgrade\n5. Records subscription event for audit trail\n6. Sends downgrade confirmation email (future)\n\nRequires:\n    - User must be admin\n    - User must belong to the organization\n    - Organization must have active paid subscription\n    - New plan tier must be lower than current tier\n\nRequest Body:\n    {\n        \"org_id\": \"org_123\",\n        \"new_plan_tier\": \"starter\",\n        \"reason\": \"Cost reduction\"\n    }\n\nReturns:\n    dict: Downgrade scheduled details\n    {\n        \"success\": true,\n        \"subscription\": SubscriptionResponse,\n        \"pending_downgrade\": {\n            \"new_plan_tier\": \"starter\",\n            \"effective_date\": \"2025-11-23\",\n            \"credit_amount_cents\": 5000,\n            \"reason\": \"Cost reduction\"\n        },\n        \"message\": \"Downgrade scheduled for end of billing period\"\n    }",
         "operationId": "downgradeSubscription",
-        "parameters": [
-          {
-            "description": "Person ID",
-            "in": "query",
-            "name": "person_id",
-            "required": true,
-            "schema": {
-              "description": "Person ID",
-              "title": "Person Id",
-              "type": "string"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -7604,6 +7547,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Downgrade Subscription",
         "tags": [
           "billing"
@@ -7623,17 +7571,6 @@
             "schema": {
               "description": "Organization ID",
               "title": "Org Id",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Person ID",
-            "in": "query",
-            "name": "person_id",
-            "required": true,
-            "schema": {
-              "description": "Person ID",
-              "title": "Person Id",
               "type": "string"
             }
           }
@@ -7662,6 +7599,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Reactivate Subscription",
         "tags": [
           "billing"
@@ -7672,19 +7614,6 @@
       "post": {
         "description": "Start a 14-day trial of a paid plan.\n\nThis endpoint:\n1. Validates organization is on free plan\n2. Updates subscription to trial status\n3. Sets trial_end_date to 14 days from now\n4. Updates usage limits to trial plan tier\n5. Records subscription event for audit trail\n6. Sends trial welcome email (future)\n\nRequires:\n    - User must be admin\n    - User must belong to the organization\n    - Organization must have active free plan\n\nRequest Body:\n    {\n        \"org_id\": \"org_123\",\n        \"plan_tier\": \"starter\",\n        \"trial_days\": 14\n    }\n\nReturns:\n    dict: Trial subscription details\n    {\n        \"success\": true,\n        \"subscription\": SubscriptionResponse,\n        \"trial_end_date\": \"2025-11-06T...\",\n        \"message\": \"Started 14-day trial of starter plan\"\n    }",
         "operationId": "startTrial",
-        "parameters": [
-          {
-            "description": "Person ID",
-            "in": "query",
-            "name": "person_id",
-            "required": true,
-            "schema": {
-              "description": "Person ID",
-              "title": "Person Id",
-              "type": "string"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -7719,6 +7648,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Start Trial",
         "tags": [
           "billing"
@@ -7729,19 +7663,6 @@
       "post": {
         "description": "Upgrade organization to paid plan.\n\nThis endpoint:\n1. Creates Stripe checkout session for payment collection\n2. Upgrades subscription when payment succeeds\n3. Records billing history and audit trail\n4. Updates usage limits to new plan tier\n5. Sends confirmation email (future)\n\nRequires:\n    - User must be admin\n    - User must belong to the organization\n    - Organization must have active free plan\n\nRequest Body:\n    {\n        \"org_id\": \"org_123\",\n        \"plan_tier\": \"starter\",\n        \"billing_cycle\": \"monthly\",\n        \"payment_method_id\": \"pm_xxx\",\n        \"trial_days\": 14\n    }\n\nReturns:\n    dict: Checkout session URL for payment\n    {\n        \"success\": true,\n        \"checkout_url\": \"https://checkout.stripe.com/...\",\n        \"session_id\": \"cs_xxx\",\n        \"message\": \"Checkout session created\"\n    }",
         "operationId": "upgradeSubscription",
-        "parameters": [
-          {
-            "description": "Person ID",
-            "in": "query",
-            "name": "person_id",
-            "required": true,
-            "schema": {
-              "description": "Person ID",
-              "title": "Person Id",
-              "type": "string"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -7776,6 +7697,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Upgrade Subscription",
         "tags": [
           "billing"
